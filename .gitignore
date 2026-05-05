@@ -4,6 +4,11 @@ data/rotated/
 results/*
 !results/*.pdf
 !results/*.png
+!results/english_only/
+results/english_only/*
+!results/english_only/*.pdf
+!results/english_only/*.png
+!results/english_only/*.csv
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
