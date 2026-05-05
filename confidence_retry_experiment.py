@@ -33,7 +33,7 @@ from src.preprocess import load_and_preprocess, LABEL_TO_DEGREES, DEGREES_TO_LAB
 DATASET_CSV  = Path('data/dataset.csv')
 OUT_DIR      = Path('results/confidence_retry')
 MODEL_PATH   = 'models/model.onnx'
-THRESHOLD    = 0.50
+THRESHOLD    = 0.75
 DEGREES      = [0, 90, 180, 270]
 ROTATE_FLAGS = {
     0:   None,
@@ -112,13 +112,14 @@ for row in tqdm(uncertain_df.itertuples(), total=len(uncertain_df)):
 
     best = {'conf': row.confidence, 'inferred_label': row.pred_label, 'retry_deg': 0}
     all_retries = []
+    per_rot_conf = {}  # retry_deg → confidence after retry
 
     for retry_deg in DEGREES:
         retried = rotate_array(img, retry_deg)
         r_label, r_conf, _ = predict_from_array(retried)
-        # Undo the retry rotation to infer what the original orientation was
         inferred_deg   = (LABEL_TO_DEGREES[r_label] - retry_deg) % 360
         inferred_label = DEGREES_TO_LABEL.get(inferred_deg, -1)
+        per_rot_conf[retry_deg] = r_conf
         all_retries.append({
             'retry_deg':       retry_deg,
             'model_pred_deg':  LABEL_TO_DEGREES[r_label],
@@ -138,6 +139,10 @@ for row in tqdm(uncertain_df.itertuples(), total=len(uncertain_df)):
         'orig_pred_label':     row.pred_label,
         'orig_pred_deg':       LABEL_TO_DEGREES[row.pred_label],
         'orig_confidence':     row.confidence,
+        'conf_rot0':           per_rot_conf[0],
+        'conf_rot90':          per_rot_conf[90],
+        'conf_rot180':         per_rot_conf[180],
+        'conf_rot270':         per_rot_conf[270],
         'best_retry_deg':      best_r['retry_deg'],
         'best_model_pred_deg': best_r['model_pred_deg'],
         'best_conf':           best_r['model_conf'],
@@ -322,6 +327,53 @@ if len(retry_df) > 0:
     ax.legend()
     plt.tight_layout()
     plt.savefig(OUT_DIR / 'confidence_gain_scatter.png', dpi=150)
+    plt.close()
+
+# 5. Per-rotation confidence — which rotation consistently boosts confidence?
+if len(retry_df) > 0:
+    print('\n── Consistent rotation boost (avg conf gain per retry angle) ──')
+    print('  (positive = retry at this angle reliably increases confidence)')
+    for true_deg in DEGREES:
+        sub = retry_df[retry_df['true_deg'] == true_deg]
+        if len(sub) == 0:
+            continue
+        print(f'\n  True {true_deg:>3}°  (n={len(sub)}):')
+        for rot_col, rot_deg in [('conf_rot0',0),('conf_rot90',90),('conf_rot180',180),('conf_rot270',270)]:
+            if rot_col not in sub.columns:
+                continue
+            gain     = (sub[rot_col] - sub['orig_confidence']).mean()
+            pct_up   = (sub[rot_col] > sub['orig_confidence']).mean() * 100
+            print(f'    +{rot_deg:>3}°  avg_gain={gain*100:+.1f}pp  '
+                  f'improved={pct_up:.0f}% of cases')
+
+    # Heatmap: avg confidence gain per (true_deg, retry_deg)
+    gain_rows = []
+    for true_deg in DEGREES:
+        sub = retry_df[retry_df['true_deg'] == true_deg]
+        if len(sub) == 0:
+            continue
+        for rot_col, rot_deg in [('conf_rot0',0),('conf_rot90',90),('conf_rot180',180),('conf_rot270',270)]:
+            if rot_col not in sub.columns:
+                continue
+            gain_rows.append({
+                'true_deg':  true_deg,
+                'retry_deg': rot_deg,
+                'avg_gain':  (sub[rot_col] - sub['orig_confidence']).mean() * 100,
+            })
+    gain_df = pd.DataFrame(gain_rows)
+    gain_pivot = gain_df.pivot(index='true_deg', columns='retry_deg', values='avg_gain')
+
+    fig, ax = plt.subplots(figsize=(7, 5))
+    sns.heatmap(gain_pivot, annot=True, fmt='.1f', ax=ax,
+                cmap='RdYlGn', center=0,
+                xticklabels=[f'+{d}°' for d in DEGREES],
+                yticklabels=[f'{d}°' for d in DEGREES])
+    ax.set_xlabel('Retry Rotation Applied')
+    ax.set_ylabel('True Orientation')
+    ax.set_title(f'Avg Confidence Gain (pp) per Retry Rotation\n'
+                 f'(threshold={THRESHOLD:.0%}, n={len(retry_df)} uncertain images)')
+    plt.tight_layout()
+    plt.savefig(OUT_DIR / 'retry_confidence_gain_heatmap.png', dpi=150)
     plt.close()
 
 print(f'\nResults → {OUT_DIR}')
