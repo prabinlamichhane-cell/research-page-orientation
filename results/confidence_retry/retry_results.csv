@@ -1,0 +1,6 @@
+source,true_deg,true_label,messy,orig_pred_label,orig_pred_deg,orig_confidence,best_retry_deg,best_model_pred_deg,best_conf,inferred_label,retry_correct,orig_correct,conf_gain
+वार्षिक प्रतिवेदन New 1_naavn9s_page0002.png,270,3,True,2,180,0.37025701999664307,90,0,0.6578419804573059,3,True,False,0.28758496046066284
+Audit Report NFRS Sample 2 (2)_page0011.png,270,3,True,1,90,0.47534677386283875,270,180,0.9070576429367065,3,True,False,0.4317108690738678
+Audit Report NFRS Sample 2 (2)_page0004.png,180,2,True,0,0,0.46202611923217773,180,0,0.8748764991760254,2,True,False,0.41285037994384766
+pdfoverimage_page0001.png,0,0,True,0,0,0.4806482493877411,90,90,0.5111492276191711,0,True,True,0.030500978231430054
+Audit Report NFRS Sample 2 (2)_page0009.png,0,0,True,0,0,0.4926430583000183,270,270,0.7556500434875488,0,True,True,0.2630069851875305
