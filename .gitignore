@@ -1,0 +1,9 @@
+data/raw/
+data/rotated/
+models/
+results/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.venv/
+*.egg-info/
