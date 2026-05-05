@@ -29,9 +29,17 @@ Nepali financial documents. Runtimes compared:
 | Augmented (messy) | 210 images (38%) |
 | Messy transforms | Page skew, shadow gradient, ink bleed, fold/crease, salt-and-pepper noise, blur, heavy JPEG |
 
-All source PDFs are naturally 0° orientation. Class balance was enforced by rotating every
-source image into all 4 orientations. Messy augmentation was applied equally across all
-classes to prevent the model from using image quality as an orientation cue.
+### Data Quality Note
+
+All source PDFs were manually verified to ensure every source page is at 0° orientation
+before synthetic rotation. Landscape financial tables (balance sheets, wide schedules) that
+were stored at 90° in the PDF metadata were corrected to portrait orientation manually.
+Pages with non-zero PDF rotation metadata were confirmed corrected before extraction.
+
+This step is critical — if source pages are not at true 0°, the synthetic rotation labels
+are wrong and accuracy measurements are meaningless. An earlier run without this correction
+yielded 89.1% accuracy; after correction accuracy rose to **96.9%**, confirming the impact
+of label integrity.
 
 ---
 
@@ -39,9 +47,9 @@ classes to prevent the model from using image quality as an orientation cue.
 
 | Runtime | Accuracy | Avg Latency | P50 Latency | P95 Latency | Throughput |
 |---|---|---|---|---|---|
-| PaddlePaddle | 89.13% | 38.57 ms | 38.83 ms | 45.56 ms | 25.9 img/s |
-| ONNX Runtime | 89.13% | 31.53 ms | 31.33 ms | 39.35 ms | 31.7 img/s |
-| Optimum ORT | 89.13% | 30.88 ms | 30.95 ms | 37.92 ms | 32.4 img/s |
+| PaddlePaddle | 96.92% | 39.53 ms | 39.42 ms | 46.54 ms | 25.3 img/s |
+| ONNX Runtime | 96.92% | 34.14 ms | 33.53 ms | 43.87 ms | 29.3 img/s |
+| Optimum ORT  | 96.92% | 32.00 ms | 32.23 ms | 39.15 ms | 31.2 img/s |
 
 **Prediction agreement: 100% across all 3 runtimes** — conversion is numerically lossless.
 
@@ -56,26 +64,26 @@ classes to prevent the model from using image quality as an orientation cue.
 
 | Class | Precision | Recall | F1 |
 |---|---|---|---|
-| 0° | 0.887 | 0.906 | 0.896 |
-| 90° | 0.899 | 0.899 | 0.899 |
-| 180° | 0.882 | 0.870 | 0.876 |
-| 270° | 0.898 | 0.891 | 0.895 |
-| **Overall** | **0.891** | **0.891** | **0.891** | |
+| 0° | 0.9577 | 0.9855 | 0.9714 |
+| 90° | 0.9712 | 0.9783 | 0.9747 |
+| 180° | 0.9704 | 0.9493 | 0.9597 |
+| 270° | 0.9779 | 0.9638 | 0.9708 |
+| **Overall** | **0.9693** | **0.9692** | **0.9692** |
+
+180° is the weakest class (F1: 0.960) — documents rotated 180° are most often confused with 0°,
+which is expected given symmetric page layouts.
 
 ### Confusion Analysis
 
-Most errors are **adjacent-class confusions** — the model mixes up orientations that look
-visually similar (90° apart):
+Only 17 errors in 552 images. Most are 180° ↔ 0° confusions:
 
 | True → Predicted | Errors |
 |---|---|
-| 270° → 180° | 12 |
-| 90° → 0° | 10 |
-| 180° → 90° | 10 |
-| 0° → 270° | 9 |
-
-This pattern is expected — financial documents often look similar when rotated 90° because
-of their symmetric table/column layouts.
+| 180° → 0° | 6 |
+| 90° → 270° | 3 |
+| 270° → 90° | 3 |
+| 0° → 180° | 2 |
+| 270° → 180° | 2 |
 
 ![Confusion Matrix](results/paddle_confusion_matrix.png)
 
@@ -83,11 +91,11 @@ of their symmetric table/column layouts.
 
 | Condition | Accuracy |
 |---|---|
-| Clean images | 89.77% |
-| Messy images (degraded scans) | 88.10% |
+| Clean images | 98.83% |
+| Messy images (degraded scans) | 93.81% |
 
-The 1.67% drop under messy conditions is small — the model is reasonably robust to
-scanner degradation.
+The 5% drop under messy conditions shows the model is sensitive to heavy scan degradation.
+This is the primary motivation for fine-tuning on real degraded Nepali documents.
 
 ---
 
@@ -96,16 +104,20 @@ scanner degradation.
 1. **All three runtimes produce identical predictions** — paddle2onnx conversion at opset 17
    is numerically lossless for this model.
 
-2. **ONNX Runtime is 18% faster than native PaddlePaddle** (31.53ms vs 38.57ms avg).
+2. **ONNX Runtime is 14% faster than native PaddlePaddle** (34.14ms vs 39.53ms avg).
 
-3. **Optimum ORT adds negligible overhead over raw ORT** (~2% difference, within noise).
-   The HuggingFace wrapper provides no additional optimization on CPU for this model.
+3. **Optimum ORT is the fastest** at 32.00ms avg — 19% faster than Paddle, 6% faster than
+   raw ORT. The HuggingFace wrapper adds no measurable overhead on CPU.
 
-4. **89.1% accuracy on Nepali financial documents** — reasonable for an out-of-the-box
-   model with no domain fine-tuning.
+4. **96.9% accuracy on Nepali financial documents** out-of-the-box with no domain fine-tuning —
+   strong baseline for a model trained on Chinese/English documents.
 
-5. **P95 latency stays under 46ms** across all runtimes — suitable for document preprocessing
+5. **P95 latency under 47ms** across all runtimes — suitable for document preprocessing
    pipelines where orientation is corrected before OCR.
+
+6. **Label integrity is critical** — mislabeled source pages (landscape pages stored at
+   non-0° in PDFs) caused 7.8% artificial accuracy drop in the first run. Always verify
+   source orientation before creating a rotation dataset.
 
 ---
 
@@ -116,77 +128,101 @@ scanner degradation.
 | Criterion | Recommendation |
 |---|---|
 | Accuracy | Any runtime (identical) |
-| Speed | ONNX Runtime or Optimum ORT |
+| Speed | Optimum ORT or ONNX Runtime |
 | Dependency weight | ONNX Runtime (lighter than Optimum) |
 | HuggingFace pipeline integration | Optimum ORT |
 | Ease of deployment | ONNX Runtime |
 
-- If deploying standalone: **`onnxruntime` + `model.onnx`** — minimal dependencies, fastest startup.
-- If integrating into a HuggingFace pipeline: **Optimum ORT** — virtually same speed, cleaner API.
-- **Drop PaddlePaddle** from the production stack — heavier dependency, slower, no accuracy benefit.
+- Deploying standalone: **`onnxruntime` + `model.onnx`** — minimal dependencies, 19% faster than Paddle.
+- Integrating into HuggingFace pipeline: **Optimum ORT** — fastest, clean API.
+- **Drop PaddlePaddle** from the production stack — heaviest dependency, slowest, no accuracy benefit.
 
 ---
 
 ## 7. Fine-tuning — Is It Worth It?
 
-### Current gap
+### Current state
 
-89.1% accuracy means ~60 errors in 552 images. Most errors are adjacent-class confusions
-on documents with symmetric layouts (financial tables look similar at 90° and 270°).
+96.9% out-of-the-box is strong. 17 errors in 552 images. The remaining errors cluster around:
+- **180° ↔ 0°** confusions on symmetric document layouts
+- **Messy image degradation** — 5% accuracy drop on heavily degraded scans (93.8% vs 98.8%)
 
 ### Can fine-tuning close the gap?
 
-**Yes — with moderate effort and likely significant gain.** Here is the analysis:
+**Yes — with moderate effort and meaningful gain, especially for degraded documents.**
 
-#### Why the model underperforms on Nepali documents
+#### Why errors remain on Nepali documents
 
 | Factor | Impact |
 |---|---|
-| Training data mismatch | PP-LCNet was trained on Chinese/English documents — Devanagari script and Nepali table layouts are out-of-distribution |
-| Mixed-language pages | Nepali docs mix Devanagari + English + numbers, creating layouts not seen during pre-training |
-| Document quality | Low-quality scans from small orgs (cooperatives, NGOs) differ significantly from training data |
-| Symmetric financial tables | Balance sheets / P&L statements have repetitive vertical structure that confuses 90°/270° |
+| Training data mismatch | PP-LCNet trained on Chinese/English docs — Devanagari script is out-of-distribution |
+| Symmetric financial tables | Balance sheets / P&L have repetitive structure that confuses 0° vs 180° |
+| Scan degradation | Model not exposed to the type of degradation common in Nepali org documents |
 
 #### Expected gain from fine-tuning
 
-Based on similar document orientation fine-tuning studies:
-
 | Approach | Expected Accuracy | Effort |
 |---|---|---|
-| No fine-tuning (current) | ~89% | Done |
-| Feature extraction (freeze backbone, train head only) | ~92-94% | Low — ~1-2 days |
-| Full fine-tuning (unfreeze all layers) | ~95-97% | Medium — ~3-5 days |
-| Fine-tune + larger dataset (500+ real pages) | ~97-99% | High — depends on data collection |
+| No fine-tuning (current) | ~97% | Done |
+| Feature extraction (freeze backbone, train head only) | ~98-99% | Low — 1-2 days |
+| Full fine-tuning (unfreeze all layers) | ~99%+ | Medium — 3-5 days |
+| Fine-tune + larger dataset (500+ real pages) | ~99%+ on messy docs | High |
+
+The biggest practical gain will come from **messy document robustness** — the 5% accuracy drop
+on degraded scans is the clearest gap to close. Fine-tuning on real scanned (not synthetically
+degraded) Nepali documents would directly address this.
 
 #### Fine-tuning approach (when prioritized)
 
-1. **Dataset:** Collect 500-1000 real Nepali financial document pages (currently have 137 source pages).
-   Rotate × 4 → 2000-4000 labeled images. More messy/degraded samples needed.
+1. **Data:** Collect 500+ real Nepali financial pages (currently 138 source pages).
+   Include genuinely degraded scans from cooperatives, NGOs, municipalities.
+   Rotate × 4 → 2000+ labeled images.
 
-2. **Strategy:** Start with feature extraction (freeze PP-LCNet backbone, retrain the 4-class
-   head). If accuracy plateaus below 95%, unfreeze the last 2-3 blocks.
+2. **Strategy:** Start with feature extraction — freeze PP-LCNet backbone, retrain the
+   4-class classification head only. If accuracy plateaus below 99%, progressively
+   unfreeze later blocks.
 
-3. **Export path:** Fine-tune in PaddlePaddle or convert to PyTorch (via ONNX), fine-tune,
-   re-export to ONNX. The ONNX deployment path remains the same.
+3. **Export:** Fine-tune in PaddlePaddle or convert to PyTorch via ONNX and fine-tune there.
+   Re-export to ONNX. The deployment path is unchanged.
 
-4. **Data gap is the bottleneck** — not model capacity. PP-LCNet_x1_0 has sufficient
-   capacity for 4-class orientation. More diverse Nepali document data will drive the
-   largest accuracy improvement.
+4. **Bottleneck is data, not model capacity.** PP-LCNet_x1_0 has sufficient capacity
+   for 4-class orientation. More diverse real Nepali document data drives the largest gain.
 
 #### Verdict
 
-Fine-tuning is **feasible and recommended** once more real Nepali document data is collected.
-Feature extraction alone (low effort) is likely to push accuracy to ~93-94%.
-Full fine-tuning on a larger dataset should reach ~96-98%.
+Fine-tuning is **feasible but lower priority** at 96.9% baseline. Recommended only if:
+- Production accuracy requirement is above 98%
+- Deployment involves heavily degraded documents (phone scans, fax, low-quality NGO scans)
+- Sufficient real labeled data can be collected (500+ pages)
 
 ---
 
-## 8. Technical Notes
+## 8. Limitations
+
+| Concern | Severity | Notes |
+|---|---|---|
+| Only 9 source PDFs (138 pages) | Medium | Small dataset — accuracy estimate has high variance |
+| Synthetic messiness only | Medium | Real degraded scans may behave differently from augmented ones |
+| Pre-training data unknown | Low | Cannot rule out overlap with PaddlePaddle training set |
+| 4 rotations per page not independent | Low | Page-level split would give cleaner estimate |
+
+The **96.9% figure is directionally reliable** but should be re-evaluated on a larger
+(50+ PDF) held-out test set before making production SLA commitments.
+
+---
+
+## 9. Technical Notes
 
 ### Model format
-The downloaded model uses **Paddle 3.x PIR format** (`inference.json` + `inference.pdiparams`),
-not the legacy `inference.pdmodel` format. The standard paddle.inference `Config` API
-accepts this by passing `inference.json` as the model file path.
+Downloaded model uses **Paddle 3.x PIR format** (`inference.json` + `inference.pdiparams`),
+not the legacy `inference.pdmodel` format. Pass `inference.json` as the model file path
+to `paddle.inference.Config`.
+
+### Preprocessing (from config.json — critical)
+```
+resize_short(256) → center_crop(224) → normalize(ImageNet) → to_CHW → expand_batch_dim
+```
+Simple `resize(224, 224)` without the resize_short + center_crop steps produces wrong results.
 
 ### ONNX conversion
 ```bash
@@ -200,22 +236,14 @@ paddle2onnx \
 ```
 Constant folding reduced 282 → 115 ONNX nodes.
 
-### Optimum compatibility fix
-Optimum `ORTModelForImageClassification` requires HuggingFace-standard I/O names.
-The ONNX model was patched before loading:
+### Optimum compatibility
+`ORTModelForImageClassification` requires HuggingFace-standard I/O names:
 - Input renamed: `x` → `pixel_values`
 - Output renamed: `fetch_name_0` → `logits`
-- `config.json` with `model_type: "resnet"` added to the model directory.
-
-### Preprocessing (from config.json)
-```
-resize_short(256) → center_crop(224) → normalize(ImageNet) → to_CHW → expand_batch_dim
-```
-Note: simple `resize(224, 224)` without the resize_short + center_crop steps will produce
-slightly different results and should be avoided.
+- `config.json` with `model_type: "resnet"` added to model directory.
 
 ---
 
-## 9. Repo
+## 10. Repo
 
 https://github.com/prabinlamichhane-cell/research-page-orientation
