@@ -1,7 +1,9 @@
 data/raw/
 data/rotated/
 models/
-results/
+results/*
+!results/*.pdf
+!results/*.png
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
