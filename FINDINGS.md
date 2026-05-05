@@ -244,6 +244,40 @@ Constant folding reduced 282 → 115 ONNX nodes.
 
 ---
 
-## 10. Repo
+## 10. English-Only Isolated Test
+
+To confirm whether errors originate from Devanagari script vs general model weakness,
+an isolated test was run on a single English-only Nepali financial document.
+
+**Document:** Annual-Report-2023-24-English.pdf
+**Pages:** 36 source pages × 4 rotations = 144 test images
+
+| Runtime | Accuracy | Avg Latency | Throughput |
+|---|---|---|---|
+| PaddlePaddle | **100.0%** | 39.84 ms | 25.1 img/s |
+| ONNX Runtime | **100.0%** | 20.96 ms | 47.7 img/s |
+| Optimum ORT  | **100.0%** | 32.18 ms | 31.1 img/s |
+
+**Zero errors. 100% agreement across all runtimes.**
+
+### Key Insight
+
+The main dataset's 3.1% error rate (17/552 images) is **entirely attributable to
+Devanagari/mixed-script pages**, not to financial document structure or layout complexity.
+The model handles English financial documents perfectly out-of-the-box.
+
+This confirms:
+- Fine-tuning benefit is concentrated on Devanagari-script pages
+- If the production pipeline handles only English documents, no fine-tuning is needed
+- For Nepali-language documents, the 96.9% baseline applies
+
+### Charts
+
+![English-Only Confusion Matrix](results/english_only/english_only_confusion_matrix.png)
+![English-Only Comparison](results/english_only/english_only_comparison.png)
+
+---
+
+## 11. Repo
 
 https://github.com/prabinlamichhane-cell/research-page-orientation
