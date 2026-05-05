@@ -1,6 +1,6 @@
 data/raw/
 data/rotated/
-models/
+# models/ — tracked (all files under 10MB, no LFS needed)
 results/*
 !results/*.pdf
 !results/*.png
