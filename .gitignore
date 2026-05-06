@@ -9,6 +9,11 @@ results/english_only/*
 !results/english_only/*.pdf
 !results/english_only/*.png
 !results/english_only/*.csv
+!results/english_only/confidence_retry/
+results/english_only/confidence_retry/*
+!results/english_only/confidence_retry/*.pdf
+!results/english_only/confidence_retry/*.png
+!results/english_only/confidence_retry/*.csv
 !results/confidence_retry/
 results/confidence_retry/*
 !results/confidence_retry/*.pdf

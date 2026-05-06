@@ -1,0 +1,7 @@
+source,true_deg,true_label,orig_pred_deg,orig_confidence,corrected_pred,corrected_conf,corrected_is_0,orig_correct
+Audit Report (1)_page_0005.png,270,3,270,0.7481681704521179,0,0.8876899480819702,True,True
+Audit Report NFRS Sample 2 (1) (1)_page_0008.png,90,1,90,0.5310167670249939,0,0.7692591547966003,True,True
+Audit Report NFRS Sample 2 (1) (1)_page_0008.png,270,3,270,0.4655519723892212,0,0.7692591547966003,True,True
+Audit Report NFRS Sample 2 (1) (1)_page_0009.png,0,0,0,0.7134963274002075,0,0.7134963274002075,True,True
+Audit Report NFRS Sample 2 (1) (1)_page_0009.png,180,2,0,0.6563367247581482,0,0.6563367247581482,True,False
+Provisional Report_page_0007.png,270,3,0,0.48222067952156067,0,0.48222067952156067,True,False
