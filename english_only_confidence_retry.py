@@ -195,6 +195,7 @@ for set_name, csv_path in CSVS.items():
     }
 
     # ── Plots ──────────────────────────────────────────────────────────────────
+    # Plot 1: distribution + by-class
     fig, axes = plt.subplots(1, 2, figsize=(14, 5))
     axes[0].hist(df['confidence'], bins=30, color='#4C72B0', edgecolor='white')
     axes[0].axvline(THRESHOLD, color='red', linestyle='--', label=f'Threshold ({THRESHOLD:.0%})')
@@ -210,6 +211,60 @@ for set_name, csv_path in CSVS.items():
     axes[1].legend()
     plt.tight_layout()
     plt.savefig(OUT_DIR / f'{slug}_confidence_dist.png', dpi=150)
+    plt.close()
+
+    # Plot 2: correct vs wrong confidence
+    correct_conf = df[df['correct']]['confidence'].values
+    wrong_conf   = df[~df['correct']]['confidence'].values
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+
+    # Histogram overlay
+    axes[0].hist(correct_conf, bins=25, alpha=0.7, color='#55A868', edgecolor='white',
+                 label=f'Correct (n={len(correct_conf)})')
+    if len(wrong_conf):
+        axes[0].hist(wrong_conf, bins=25, alpha=0.7, color='#C44E52', edgecolor='white',
+                     label=f'Wrong (n={len(wrong_conf)})')
+    axes[0].axvline(THRESHOLD, color='black', linestyle='--', alpha=0.6, label=f'Threshold ({THRESHOLD:.0%})')
+    axes[0].set_xlabel('Confidence'); axes[0].set_ylabel('Count')
+    axes[0].set_title(f'Confidence: Correct vs Wrong\n{set_name}')
+    axes[0].legend()
+
+    # Box/strip plot per class — correct vs wrong
+    import matplotlib.patches as mpatches
+    positions_c, positions_w = [], []
+    data_c, data_w = [], []
+    xticks, xlabels = [], []
+    gap = 0.4
+    for i, d in enumerate(DEGREES):
+        sub = df[df['degrees'] == d]
+        xc = i * 2
+        xw = i * 2 + gap
+        data_c.append(sub[sub['correct']]['confidence'].values)
+        data_w.append(sub[~sub['correct']]['confidence'].values)
+        positions_c.append(xc)
+        positions_w.append(xw)
+        xticks.append(xc + gap / 2)
+        xlabels.append(f'{d}°')
+
+    bp_c = axes[1].boxplot(data_c, positions=positions_c, widths=0.3,
+                           patch_artist=True, manage_ticks=False)
+    bp_w = axes[1].boxplot(data_w, positions=positions_w, widths=0.3,
+                           patch_artist=True, manage_ticks=False)
+    for patch in bp_c['boxes']:
+        patch.set_facecolor('#55A86888')
+    for patch in bp_w['boxes']:
+        patch.set_facecolor('#C44E5288')
+    axes[1].set_xticks(xticks); axes[1].set_xticklabels(xlabels)
+    axes[1].axhline(THRESHOLD, color='black', linestyle='--', alpha=0.5)
+    axes[1].set_ylabel('Confidence')
+    axes[1].set_title(f'Confidence by Class (Correct vs Wrong)\n{set_name}')
+    axes[1].legend(handles=[
+        mpatches.Patch(color='#55A868', label='Correct'),
+        mpatches.Patch(color='#C44E52', label='Wrong'),
+    ])
+    plt.tight_layout()
+    plt.savefig(OUT_DIR / f'{slug}_correct_vs_wrong.png', dpi=150)
     plt.close()
 
     if len(retry_df) > 0:
@@ -254,6 +309,7 @@ print(f'\nAll results saved -> {OUT_DIR}')
 # ── PDF Report ────────────────────────────────────────────────────────────────
 print('Generating PDF report...')
 
+from PIL import Image as PILImage
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import cm
@@ -288,13 +344,14 @@ def tbl_style(header='#16213e'):
         ('BOTTOMPADDING',  (0,0), (-1,-1), 4),
     ])
 
-def add_img(path, w=14*cm, h=8*cm):
+def add_img(path, max_w=14*cm, max_h=8*cm):
     p = Path(path)
-    if p.exists():
-        i = RLImage(str(p), width=w)
-        i._restrictSize(w, h)
-        return i
-    return Paragraph(f'[not found: {p.name}]', MONO)
+    if not p.exists():
+        return Paragraph(f'[not found: {p.name}]', MONO)
+    with PILImage.open(p) as im:
+        nat_w, nat_h = im.size
+    scale = min(max_w / nat_w, max_h / nat_h)
+    return RLImage(str(p), width=nat_w * scale, height=nat_h * scale)
 
 story = []
 
@@ -350,7 +407,18 @@ for set_name, res in all_results.items():
         ]
     story.append(Table(base_data, colWidths=[9*cm, 8*cm], style=tbl_style()))
     story.append(Spacer(1, 0.3*cm))
-    story.append(add_img(OUT_DIR / f'{slug}_confidence_dist.png'))
+    story.append(add_img(OUT_DIR / f'{slug}_confidence_dist.png', max_w=15*cm, max_h=8*cm))
+    story.append(Spacer(1, 0.3*cm))
+
+    # Correct vs wrong confidence chart
+    story += [Paragraph('Confidence Score: Correct vs Misclassified', H3)]
+    n_wrong_set = int((~df['correct']).sum())
+    story += [Paragraph(
+        f'{len(df) - n_wrong_set} correct predictions | {n_wrong_set} wrong predictions. '
+        'Left: overlapping histogram shows wrong predictions cluster at lower confidence. '
+        'Right: per-class boxplot isolates which orientation classes produce uncertain wrong predictions.',
+        BODY)]
+    story.append(add_img(OUT_DIR / f'{slug}_correct_vs_wrong.png', max_w=15*cm, max_h=8*cm))
     story.append(Spacer(1, 0.3*cm))
 
     # Retry results
@@ -404,9 +472,9 @@ for set_name, res in all_results.items():
 
         heatmap_path = OUT_DIR / f'{slug}_gain_heatmap.png'
         scatter_path = OUT_DIR / f'{slug}_gain_scatter.png'
-        story.append(add_img(heatmap_path, w=12*cm, h=7*cm))
+        story.append(add_img(heatmap_path, max_w=12*cm, max_h=7*cm))
         story.append(Spacer(1, 0.2*cm))
-        story.append(add_img(scatter_path, w=12*cm, h=7*cm))
+        story.append(add_img(scatter_path, max_w=12*cm, max_h=7*cm))
     else:
         story += [
             Paragraph('No uncertain images — all predictions above threshold.', BODY),
