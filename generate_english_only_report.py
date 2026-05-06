@@ -254,10 +254,68 @@ for title, body in findings:
         Spacer(1, 0.2*cm),
     ]
 
-# 8. Recommendation
+# 8. Failed Images
 story += [
     PageBreak(),
-    Paragraph('8. Recommendation', H2),
+    Paragraph('8. Failed Predictions — Image Gallery', H2),
+    Paragraph(
+        'All images that were misclassified by ONNX Runtime. '
+        'Each image is shown with its true orientation, predicted orientation, '
+        'and whether messify degradation was applied. '
+        'Note: Audit Report NFRS Sample 2 page 0009 fails at multiple rotations '
+        'in both sets — likely a symmetric layout that lacks clear orientation cues.', BODY),
+    Spacer(1, 0.3*cm),
+]
+
+for set_label, df, pred_col in [
+    ('Set 1 — Rotated only (clean)', df_clean, 'onnx_pred'),
+    ('Set 2 — Rotated + augment + messify', df_messy, 'onnx_pred'),
+]:
+    fp = df[df[pred_col] != df['label']].copy()
+    if len(fp) == 0:
+        continue
+    story += [Paragraph(f'<b>{set_label}</b> — {len(fp)} failure(s)', H3),
+              Spacer(1, 0.2*cm)]
+
+    LABEL_TO_DEG = {0: 0, 1: 90, 2: 180, 3: 270}
+    for _, row in fp.iterrows():
+        img_path = Path(row['image_path'])
+        true_deg = LABEL_TO_DEG[int(row['label'])]
+        pred_deg = LABEL_TO_DEG[int(row[pred_col])]
+        messy    = bool(row['messy'])
+
+        # confidence if available
+        conf_col = 'onnx_confidence' if 'onnx_confidence' in row.index else None
+
+        caption = (f'Source: {row["source"]}  |  '
+                   f'True: {true_deg}°  |  Predicted: {pred_deg}°  |  '
+                   f'Messy: {"Yes" if messy else "No"}')
+
+        if img_path.exists():
+            ri = RLImage(str(img_path), width=8*cm)
+            ri._restrictSize(8*cm, 10*cm)
+            story.append(ri)
+        else:
+            story.append(Paragraph(f'[image not found: {img_path.name}]', MONO))
+
+        story.append(Paragraph(caption, MONO))
+        story.append(Spacer(1, 0.4*cm))
+
+    story.append(Spacer(1, 0.2*cm))
+
+story += [
+    Paragraph(
+        '<b>Pattern:</b> All failures involve 0° ↔ 180° or 90° ↔ 270° confusion — '
+        'the model consistently struggles with 180° rotations of symmetric financial '
+        'table layouts where headers/footers are not prominent enough to anchor orientation. '
+        'This is the same confusion pattern observed in the main Nepali dataset.', BODY),
+    PageBreak(),
+]
+
+# 9. Recommendation
+story += [
+    PageBreak(),
+    Paragraph('9. Recommendation', H2),
 ]
 rec_data = [
     ['Scenario', 'Action', 'Expected Accuracy'],
