@@ -287,7 +287,8 @@ for set_label, df, pred_col in [
         # confidence if available
         conf_col = 'onnx_confidence' if 'onnx_confidence' in row.index else None
 
-        caption = (f'Source: {row["source"]}  |  '
+        caption = (f'File: {img_path.name}  |  '
+                   f'Dir: {img_path.parent}  |  '
                    f'True: {true_deg}°  |  Predicted: {pred_deg}°  |  '
                    f'Messy: {"Yes" if messy else "No"}')
 
