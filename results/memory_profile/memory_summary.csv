@@ -1,0 +1,4 @@
+provider,baseline_rss_mb,post_load_rss_mb,load_delta_mb,tm_load_peak_mb,peak_infer_rss_mb,infer_delta_mb,steady_rss_mb,tm_infer_peak_mb
+PaddlePaddle,219.69,597.66,377.97,57.91,608.06,10.41,603.91,0.58
+ONNX Runtime,363.34,386.47,23.12,0.57,395.27,8.8,395.27,0.59
+Optimum ORT,395.06,393.17,-1.89,160.09,406.2,13.03,351.61,0.6
